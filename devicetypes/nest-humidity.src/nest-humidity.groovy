@@ -14,7 +14,7 @@ preferences {
 
 // for the UI
 metadata {
-	definition (name: "Nest Humidity Control", namespace: "smartthings-users", author: "dianoga7@3dgo.net") {
+	definition (name: "Nest Humidity Control", namespace: "device-type.nest-humidity", author: "dianoga7@3dgo.net") {
 		capability "Polling"
 		capability "Relative Humidity Measurement"
 
