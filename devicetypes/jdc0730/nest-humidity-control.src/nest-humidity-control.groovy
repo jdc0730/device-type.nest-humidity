@@ -15,6 +15,7 @@ preferences {
 // for the UI
 metadata {
 	definition (name: "Nest Humidity Control", namespace: "jdc0730", author: "dianoga7@3dgo.net") {
+    	capability "Thermostat"
 		capability "Polling"
 		capability "Relative Humidity Measurement"
 
