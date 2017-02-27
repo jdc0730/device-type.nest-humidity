@@ -15,15 +15,26 @@ preferences {
 // for the UI
 metadata {
 	definition (name: "Nest Humidity Control", namespace: "jdc0730", author: "dianoga7@3dgo.net") {
-    	capability "Thermostat"
+		capability "Actuator"
+		capability "Health Check"
 		capability "Polling"
 		capability "Relative Humidity Measurement"
+		capability "Sensor"
+		capability "Switch"
+		capability "Switch Level"
+
+// attribute switch  off, on
+// commands off, on
+// attribute level 0-100
+// setLevel(number, rate)  0-100
+
 
 		command "setHumiditySetpoint"
-        command "humiditySetpointUp"
-        command "humiditySetpointDown"
+		command "humiditySetpointUp"
+		command "humiditySetpointDown"
 
-        attribute "humiditySetpoint", "number"
+		attribute "humiditySetpoint", "number"
+		attribute "lastPoll", "STRING"
 	}
 
 	simulator {
@@ -31,36 +42,72 @@ metadata {
 	}
 
 	tiles(scale: 2) {
-    	multiAttributeTile(name:"humidity", type:"generic", width: 6, height: 4) {
-            tileAttribute("device.humidity", key: "PRIMARY_CONTROL") {
-                attributeState "default", label:'${currentValue}%', backgroundColor:"#007ea7"                
-            }
-           
-            tileAttribute("humiditySetpoint", key: "SECONDARY_CONTROL") {
-                attributeState "default", label: 'Setpoint: ${currentValue}%' 
-            }
-            
-		}
-		     
-        standardTile("refresh", "device.thermostatMode", decoration: "flat", width: 2, height: 2) {
-            state "default", action:"polling.poll", icon:"st.secondary.refresh"
-        }
+		multiAttributeTile(name:"humidity", type:"generic", width: 6, height: 4) {
+			tileAttribute("device.humidity", key: "PRIMARY_CONTROL") {
+				attributeState "default", label:'${currentValue}%', backgroundColor:"#007ea7"
+			}
 
-        standardTile("humiditySetpointUp", "humiditySetpoint", decoration: "flat", width: 2, height: 2) {
+			tileAttribute("humiditySetpoint", key: "SECONDARY_CONTROL") {
+				attributeState "default", label: 'Setpoint: ${currentValue}%'
+			}
+		}
+
+		standardTile("refresh", "device.thermostatMode", decoration: "flat", width: 2, height: 2) {
+			state "default", action:"polling.poll", icon:"st.secondary.refresh"
+		}
+
+		standardTile("humiditySetpointUp", "device.humiditySetpoint", decoration: "flat", width: 2, height: 2) {
 			state "humiditySetpointUp", label:'  ', action:"humiditySetpointUp", icon:"st.thermostat.thermostat-up"
 		}
 
 		standardTile("humiditySetpointDown", "device.humiditySetpoint", decoration: "flat", width: 2, height: 2) {
 			state "humiditySetpointDown", label:'  ', action:"humiditySetpointDown", icon:"st.thermostat.thermostat-down"
 		}
-        
+
+		controlTile("humSliderControl", "device.humiditySetpoint", "slider", height: 2, width: 4, inactiveLabel: false, range: "0..80") {
+                        state "setHumSetpoint", action:"setHumiditySetpoint", backgroundColor: "#1e9cbb"
+                }
+
 		main(["humidity"])
-        
-        details(["humidity", "humiditySetpointUp", "humiditySetpointDown", "refresh"])
+
+		details(["humidity", "humSliderControl", "refresh"])
 
 	}
-
 }
+
+def initialize() {
+	log.trace "initialized..."
+	unschedule()
+
+	def random = new Random()
+	def random_int = random.nextInt(60)
+	def random_dint = random.nextInt(7)
+	schedule("${random_int} ${random_dint}/7 * * * ?", poll)
+	log.info "POLL scheduled (${random_int} ${random_dint}/7 * * * ?)"
+
+	def val = device.currentValue("checkInterval")
+	def timeOut = 1800
+	if(!val || val.toInteger() != timeOut) {
+		log.debug "Updating Device Health Check Interval to $timeOut"
+		sendEvent(name: "checkInterval", value: timeOut, data: [protocol: "cloud"], displayed: false)
+	}
+}
+
+def ping() {
+	log.debug "ping..."
+	poll()
+}
+
+void installed() {
+	log.trace "installed..."
+	initialize()
+}
+
+void updated() {
+	log.trace "updated..."
+	initialize()
+}
+
 
 // parse events into attributes
 def parse(String description) {
@@ -68,25 +115,63 @@ def parse(String description) {
 }
 
 // handle commands
+def isOn() {
+	int setPoint = device.latestValue("humiditySetpoint")
+	int curHum = device.latestValue("humidity")
+	return curHum < setPoint
+}
 
-def humiditySetpointUp(){
+def on() {
+	log.debug "on()..."
+	int setPoint = device.latestValue("humiditySetpoint")
+	int curHum = device.latestValue("humidity")
+	if(curHum < setPoint) { return }
+	else {
+		def newSP = curHum + 3
+		setHumiditySetpoint(newSP)
+	}
+}
+
+def off() {
+	log.debug "off()..."
+	int setPoint = device.latestValue("humiditySetpoint")
+	int curHum = device.latestValue("humidity")
+	if(curHum < setPoint) {
+		def newSP = curHum - 3
+		setHumiditySetpoint(newSP)
+	}
+}
+
+def setLevel(number) {
+	setHumiditySetpoint(number)
+}
+
+def setLevel(number, rate) {
+	setHumiditySetpoint(number)
+}
+
+def humiditySetpointUp() {
 	int newSetpoint = device.latestValue("humiditySetpoint") + 1
 	setHumiditySetpoint(newSetpoint)
 }
 
-def humiditySetpointDown(){
+def humiditySetpointDown() {
 	int newSetpoint = device.latestValue('humiditySetpoint') - 1
 	setHumiditySetpoint(newSetpoint)
 }
 
 def setHumiditySetpoint(humiditySP) {
-    if (humiditySP > 0 && humiditySP != device.latestValue('humiditySetpoint')) {
-    	api('humidity', ['target_humidity': humiditySP]) {
-        	sendEvent(name: 'humiditySetpoint', value: humiditySetpoint, unit: Humidity)
-        }
-        log.debug "Setting humidity set to: ${humiditySP}"
-    }
-    poll()
+	log.debug "setHumiditySetpoint ${humiditySP}%"
+
+	def newHum = humiditySP.toInteger()
+	if (humiditySP < 0 || humiditySP > 80) { newHum = 45 }
+	if (newHum != device.latestValue('humiditySetpoint')) {
+		api('humidity', ['target_humidity': newHum]) {
+			sendEvent(name: 'humiditySetpoint', value: humiditySetpoint, unit: '%')
+		}
+		log.debug "Setting humidity set to: ${newHum}%"
+	}
+	poll()
 }
 
 
@@ -94,17 +179,33 @@ def poll() {
 	log.debug "Executing 'poll'"
 	api('status', []) {
 		data.device = it.data.device.getAt(settings.serial)
+/*
 		data.shared = it.data.shared.getAt(settings.serial)
 		data.structureId = it.data.link.getAt(settings.serial).structure.tokenize('.')[1]
 		data.structure = it.data.structure.getAt(data.structureId)
-
 		log.debug("data.shared: " + data.shared)
-        
-		def humidity = data.device.current_humidity
-        def humiditySetpoint = Math.round(data.device.target_humidity)
+*/
 
-		sendEvent(name: 'humidity', value: humidity)
-        sendEvent(name: 'humiditySetpoint', value: humiditySetpoint, unit: Humidity)
+		def humidity = data.device.current_humidity
+		def humiditySetpoint = Math.round(data.device.target_humidity)
+
+		if(humidity && humidity <= 100) {
+			sendEvent(name: 'humidity', value: humidity, unit: '%')
+		}
+		if(humiditySetpoint && humiditySetpoint <= 100) {
+			sendEvent(name: 'humiditySetpoint', value: humiditySetpoint, unit: '%')
+			sendEvent(name: 'level', value: humiditySetpoint, unit: '%')
+			if(isOn()) {
+				sendEvent(name: 'switch', value:"on")
+			} else {
+				sendEvent(name: 'switch', value:"off")
+			}
+		}
+
+		def now=new Date()
+		def tz = location.timeZone
+		def nowString = now.format("MMM/dd HH:mm",tz)
+		sendEvent("name":"lastPoll", "value":nowString, displayed: false)
 	}
 }
 
@@ -117,10 +218,10 @@ def api(method, args = [], success = {}) {
 
 	def methods = [
 		'status': [uri: "/v2/mobile/${data.auth.user}", type: 'get'],
-        'humidity': [uri: "/v2/put/device.${settings.serial}", type: 'post'],
+		'humidity': [uri: "/v2/put/device.${settings.serial}", type: 'post'],
 	]
-    
-    def request = methods.getAt(method)
+
+	def request = methods.getAt(method)
 
 	log.debug "Logged in"
 	doRequest(request.uri, args, request.type, success)
