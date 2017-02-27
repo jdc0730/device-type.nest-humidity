@@ -167,7 +167,7 @@ def setHumiditySetpoint(humiditySP) {
 	if (humiditySP < 0 || humiditySP > 80) { newHum = 45 }
 	if (newHum != device.latestValue('humiditySetpoint')) {
 		api('humidity', ['target_humidity': newHum]) {
-			sendEvent(name: 'humiditySetpoint', value: humiditySetpoint, unit: '%')
+			sendEvent(name: 'humiditySetpoint', value: newHum, unit: '%')
 		}
 		log.debug "Setting humidity set to: ${newHum}%"
 	}
