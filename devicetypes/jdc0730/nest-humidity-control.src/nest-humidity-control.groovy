@@ -14,7 +14,7 @@ preferences {
 
 // for the UI
 metadata {
-	definition (name: "Nest Humidity Control", namespace: "jdc0730", author: "dianoga7@3dgo.net") {
+	definition (name: "Nest Humidity Control", namespace: "jdc0730", author: "dianoga7@3dgo.net", vid: "generic-humidity") {
 		capability "Actuator"
 		capability "Health Check"
 		capability "Polling"
